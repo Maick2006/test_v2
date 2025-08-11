@@ -35,7 +35,13 @@ export default function App() {
         {session.user.username} ({session.role}){" "}
         <button onClick={logout}>Salir</button>
       </div>
-      {!selected && <ActasTable token={session.token} onSelect={setSelected} />}
+      {!selected && (
+        <ActasTable
+          token={session.token}
+          user={session.user}
+          onSelect={setSelected}
+        />
+      )}
       {selected && (
         <ActaDetail
           token={session.token}

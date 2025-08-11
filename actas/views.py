@@ -8,69 +8,32 @@ from rest_framework.decorators import authentication_classes, permission_classes
 from django.http import FileResponse, Http404
 from django.conf import settings
 import os
-
 from .models import Acta, Compromiso, Gestion
 from .serializers import ActaSerializer, GestionSerializer
 
-
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
-
     def post(self, request):
-        correo = (
-            request.data.get("correo")
-            or request.data.get("email")
-            or request.data.get("username")
-        )
-        password = (
-            request.data.get("password")
-            or request.data.get("contraseña")
-            or request.data.get("contrasena")
-        )
-
+        correo = request.data.get("correo") or request.data.get("email") or request.data.get("username")
+        password = request.data.get("password") or request.data.get("contraseña") or request.data.get("contrasena")
         if not correo or not password:
-            return Response(
-                {"detail": "correo y password son requeridos"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"detail": "correo y password son requeridos"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             user = User.objects.get(email=correo)
         except User.DoesNotExist:
             try:
                 user = User.objects.get(username=correo)
             except User.DoesNotExist:
-                return Response(
-                    {"detail": "Credenciales inválidas"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
+                return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST)
         if not user.check_password(password):
-            return Response(
-                {"detail": "Credenciales inválidas"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+            return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_400_BAD_REQUEST)
         token, _ = Token.objects.get_or_create(user=user)
         role = "Administrador" if user.is_staff else "Usuario Base"
+        return Response({"token": token.key, "role": role, "user": {"id": user.id, "email": user.email, "username": user.username, "is_staff": user.is_staff}})
 
-        return Response(
-            {
-                "token": token.key,
-                "role": role,
-                "user": {
-                    "id": user.id,
-                    "email": user.email,
-                    "username": user.username,
-                },
-            }
-        )
-
-
-class ActaListView(generics.ListAPIView):
+class ActaListCreateView(generics.ListCreateAPIView):
     serializer_class = ActaSerializer
     permission_classes = [permissions.IsAuthenticated]
-
     def get_queryset(self):
         qs = Acta.objects.all().order_by("-fecha")
         user = self.request.user
@@ -86,13 +49,16 @@ class ActaListView(generics.ListAPIView):
         if fecha:
             qs = qs.filter(fecha=fecha)
         return qs
-
+    def perform_create(self, serializer):
+        if not self.request.user.is_staff:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Solo los administradores pueden crear actas.")
+        serializer.save()
 
 class ActaDetailView(generics.RetrieveAPIView):
     serializer_class = ActaSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = Acta.objects.all()
-
     def get_object(self):
         obj = super().get_object()
         if not self.request.user.is_staff and self.request.user not in obj.participantes.all():
@@ -100,19 +66,15 @@ class ActaDetailView(generics.RetrieveAPIView):
             raise PermissionDenied("No tiene acceso a este acta")
         return obj
 
-
 class GestionCreateView(generics.CreateAPIView):
     serializer_class = GestionSerializer
     permission_classes = [permissions.IsAuthenticated]
-
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx.update({"request": self.request})
         return ctx
-
     def perform_create(self, serializer):
         serializer.save(creado_por=self.request.user)
-
 
 @api_view(["GET"])
 @authentication_classes([TokenAuthentication])

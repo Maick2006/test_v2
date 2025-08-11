@@ -14,8 +14,24 @@ export default function GestionForm({ token, compromisos }) {
     form.append("fecha", fecha);
     form.append("descripcion", descripcion);
     if (archivo) form.append("archivo", archivo);
-    await createGestion(token, form);
-    alert("Gestión creada");
+
+    try {
+      await createGestion(token, form);
+      alert("Gestión creada");
+      setFecha("");
+      setDescripcion("");
+      setArchivo(null);
+      setCompromiso(compromisos[0]?.id || "");
+    } catch (error) {
+      console.error("Error al crear la gestión:", error);
+      if (error.response && error.response.data) {
+        alert("Error: " + JSON.stringify(error.response.data));
+      } else if (error.message) {
+        alert("Error: " + error.message);
+      } else {
+        alert("Error desconocido al crear la gestión");
+      }
+    }
   };
 
   return (

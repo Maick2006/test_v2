@@ -8,11 +8,19 @@ export default function LoginForm({ onLogin }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    setError(null);
     try {
       const data = await login(correo, password);
       onLogin(data);
-    } catch {
-      setError("Credenciales inválidas");
+    } catch (err) {
+      console.error("Error en login:", err);
+      if (err.response && err.response.data) {
+        setError(JSON.stringify(err.response.data));
+      } else if (err.message) {
+        setError(err.message);
+      } else {
+        setError("Credenciales inválidas");
+      }
     }
   };
 
