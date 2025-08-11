@@ -20,15 +20,29 @@ export default function App() {
     setSession(null);
   };
 
-  if (!session) return <LoginForm onLogin={onLogin} />;
+  if (!session) {
+    return (
+      <div>
+        <h1>Sistema de Actas</h1>
+        <LoginForm onLogin={onLogin} />
+      </div>
+    );
+  }
 
   return (
     <div>
       <div>
-        {session.user.username} ({session.role}) <button onClick={logout}>Salir</button>
+        {session.user.username} ({session.role}){" "}
+        <button onClick={logout}>Salir</button>
       </div>
       {!selected && <ActasTable token={session.token} onSelect={setSelected} />}
-      {selected && <ActaDetail token={session.token} actaId={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <ActaDetail
+          token={session.token}
+          actaId={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

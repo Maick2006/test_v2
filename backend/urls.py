@@ -15,15 +15,27 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.contrib import admin
 from django.urls import path
-from actas.views import LoginView, ActaListView, ActaDetailView, GestionCreateView, protected_media
+from django.conf import settings
+from django.conf.urls.static import static
+
+from actas.views import (
+    LoginView,
+    ActaListView,
+    ActaDetailView,
+    GestionCreateView,
+    protected_media,
+)
 
 urlpatterns = [
-    path("login/", LoginView.as_view(), name="login"),
-    path("actas/", ActaListView.as_view(), name="acta-list"),
-    path("actas/<int:pk>/", ActaDetailView.as_view(), name="acta-detail"),
-    path("gestiones/", GestionCreateView.as_view(), name="gestion-create"),
+    path("admin/", admin.site.urls),
+    path("api/login/", LoginView.as_view(), name="login"),
+    path("api/actas/", ActaListView.as_view(), name="actas-list"),
+    path("api/actas/<int:pk>/", ActaDetailView.as_view(), name="acta-detail"),
+    path("api/gestiones/", GestionCreateView.as_view(), name="gestion-create"),
     path("media/<str:filename>/", protected_media, name="protected-media"),
 ]
 
-
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
