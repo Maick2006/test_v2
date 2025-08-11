@@ -1,1 +1,0 @@
-// Aquí irá el componente para subir gestiones

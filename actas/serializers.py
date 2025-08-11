@@ -1,40 +1,54 @@
 from rest_framework import serializers
-from .models import Acta, Compromiso, Gestion, Usuario
+from .models import Acta, Compromiso, Gestion
+from django.contrib.auth.models import User
+import os
 
-
-class UsuarioSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Usuario
-        fields = ['id', 'username', 'email', 'rol']
-
+        model = User
+        fields = ["id", "username", "email", "is_staff"]
 
 class CompromisoSerializer(serializers.ModelSerializer):
+    responsable = UserSerializer(read_only=True)
+    responsable_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), source="responsable", write_only=True, required=False
+    )
+
     class Meta:
         model = Compromiso
-        fields = '__all__'
+        fields = ["id", "titulo", "descripcion", "responsable", "responsable_id", "fecha_vencimiento", "estado"]
 
+class GestionSerializer(serializers.ModelSerializer):
+    archivo = serializers.FileField(required=False, allow_null=True)
+
+    class Meta:
+        model = Gestion
+        fields = ["id", "compromiso", "fecha", "descripcion", "archivo", "creado_por"]
+        read_only_fields = ["creado_por"]
+
+    def validate_archivo(self, value):
+        if value:
+            ext = os.path.splitext(value.name)[1].lower()
+            if ext not in [".pdf", ".jpg", ".jpeg"]:
+                raise serializers.ValidationError("Solo se permiten archivos .pdf o .jpg")
+            if value.size > 5 * 1024 * 1024:
+                raise serializers.ValidationError("El archivo no puede superar 5MB")
+        return value
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and hasattr(request, "user") and request.user.is_authenticated:
+            validated_data["creado_por"] = request.user
+        return super().create(validated_data)
 
 class ActaSerializer(serializers.ModelSerializer):
     compromisos = CompromisoSerializer(many=True, read_only=True)
+    participantes = UserSerializer(many=True, read_only=True)
+    pdf_path = serializers.SerializerMethodField()
 
     class Meta:
         model = Acta
-        fields = '__all__'
+        fields = ["id", "titulo", "descripcion", "estado", "fecha", "pdf_path", "compromisos", "participantes"]
 
-
-class GestionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Gestion
-        fields = '__all__'
-
-    def validate_archivo(self, archivo):
-        max_size = 5 * 1024 * 1024  # 5MB
-        valid_extensions = ['.pdf', '.jpg']
-
-        if archivo.size > max_size:
-            raise serializers.ValidationError("El archivo no debe superar los 5MB.")
-
-        if not any(archivo.name.lower().endswith(ext) for ext in valid_extensions):
-            raise serializers.ValidationError("Solo se permiten archivos PDF o JPG.")
-
-        return archivo
+    def get_pdf_path(self, obj):
+        return obj.pdf.name if obj.pdf else None

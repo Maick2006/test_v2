@@ -1,78 +1,124 @@
-# actas/views.py
-from rest_framework import viewsets, permissions, serializers
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.authtoken.models import Token
+from rest_framework.views import APIView
+from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from rest_framework.filters import SearchFilter, OrderingFilter
-from django_filters.rest_framework import DjangoFilterBackend
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.decorators import authentication_classes, permission_classes, api_view
 from django.http import FileResponse, Http404
-from django.contrib.auth.decorators import login_required
 from django.conf import settings
 import os
 
-from .models import Acta, Compromiso, Gestion, Usuario
-from .serializers import ActaSerializer, CompromisoSerializer, GestionSerializer, UsuarioSerializer
+from .models import Acta, Compromiso, Gestion
+from .serializers import ActaSerializer, GestionSerializer
 
 
-class UsuarioViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Usuario.objects.all()
-    serializer_class = UsuarioSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-
-class CustomLoginView(ObtainAuthToken):
+class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
-    def post(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data,
-                                           context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data['user']
-        token, created = Token.objects.get_or_create(user=user)
-        return Response({
-            'token': token.key,
-            'username': user.username,
-            'rol': user.rol  
-        })
+    def post(self, request):
+        correo = (
+            request.data.get("correo")
+            or request.data.get("email")
+            or request.data.get("username")
+        )
+        password = (
+            request.data.get("password")
+            or request.data.get("contraseña")
+            or request.data.get("contrasena")
+        )
+
+        if not correo or not password:
+            return Response(
+                {"detail": "correo y password son requeridos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(email=correo)
+        except User.DoesNotExist:
+            try:
+                user = User.objects.get(username=correo)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": "Credenciales inválidas"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if not user.check_password(password):
+            return Response(
+                {"detail": "Credenciales inválidas"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+        role = "Administrador" if user.is_staff else "Usuario Base"
+
+        return Response(
+            {
+                "token": token.key,
+                "role": role,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                },
+            }
+        )
 
 
-class ActaViewSet(viewsets.ModelViewSet):
-    queryset = Acta.objects.all()
+class ActaListView(generics.ListAPIView):
     serializer_class = ActaSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['estado', 'fecha']
-    search_fields = ['titulo']
+
+    def get_queryset(self):
+        qs = Acta.objects.all().order_by("-fecha")
+        user = self.request.user
+        if not user.is_staff:
+            qs = qs.filter(participantes=user)
+        estado = self.request.query_params.get("estado")
+        titulo = self.request.query_params.get("titulo")
+        fecha = self.request.query_params.get("fecha")
+        if estado:
+            qs = qs.filter(estado__iexact=estado)
+        if titulo:
+            qs = qs.filter(titulo__icontains=titulo)
+        if fecha:
+            qs = qs.filter(fecha=fecha)
+        return qs
 
 
-class CompromisoViewSet(viewsets.ModelViewSet):
-    queryset = Compromiso.objects.all()
-    serializer_class = CompromisoSerializer
+class ActaDetailView(generics.RetrieveAPIView):
+    serializer_class = ActaSerializer
     permission_classes = [permissions.IsAuthenticated]
+    queryset = Acta.objects.all()
+
+    def get_object(self):
+        obj = super().get_object()
+        if not self.request.user.is_staff and self.request.user not in obj.participantes.all():
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("No tiene acceso a este acta")
+        return obj
 
 
-class GestionViewSet(viewsets.ModelViewSet):
-    queryset = Gestion.objects.all()
+class GestionCreateView(generics.CreateAPIView):
     serializer_class = GestionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx.update({"request": self.request})
+        return ctx
+
     def perform_create(self, serializer):
-        archivo = self.request.FILES.get('archivo')
-
-        if archivo:
-            if not archivo.name.endswith(('.pdf', '.jpg', '.jpeg')):
-                raise serializers.ValidationError("El archivo debe ser PDF o JPG.")
-            if archivo.size > 5 * 1024 * 1024:
-                raise serializers.ValidationError("El archivo no debe pesar más de 5MB.")
-
-        serializer.save()
+        serializer.save(creado_por=self.request.user)
 
 
-@login_required
-def serve_protected_file(request, file_path):
-    full_path = os.path.join(settings.MEDIA_ROOT, file_path)
-
-    if os.path.exists(full_path):
-        return FileResponse(open(full_path, 'rb'))
-    else:
-        raise Http404("Archivo no encontrado")
+@api_view(["GET"])
+@authentication_classes([TokenAuthentication])
+@permission_classes([permissions.IsAuthenticated])
+def protected_media(request, filename):
+    file_path = os.path.join(settings.MEDIA_ROOT, filename)
+    if not os.path.exists(file_path):
+        raise Http404()
+    return FileResponse(open(file_path, "rb"), as_attachment=False)

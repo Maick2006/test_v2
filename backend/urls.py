@@ -14,37 +14,16 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path, re_path
-from rest_framework.routers import DefaultRouter
-from actas.views import (
-    UsuarioViewSet,
-    ActaViewSet,
-    CompromisoViewSet,
-    GestionViewSet,
-    CustomLoginView,
-    serve_protected_file,
-)
-from django.conf import settings
-from django.conf.urls.static import static
 
-
-router = DefaultRouter()
-router.register('usuarios', UsuarioViewSet)
-router.register('actas', ActaViewSet)
-router.register('compromisos', CompromisoViewSet)
-router.register('gestiones', GestionViewSet)
-
+from django.urls import path
+from actas.views import LoginView, ActaListView, ActaDetailView, GestionCreateView, protected_media
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/login/', CustomLoginView.as_view(), name='login'),  
-    re_path(r'^media/(?P<file_path>.*)$', serve_protected_file),
+    path("login/", LoginView.as_view(), name="login"),
+    path("actas/", ActaListView.as_view(), name="acta-list"),
+    path("actas/<int:pk>/", ActaDetailView.as_view(), name="acta-detail"),
+    path("gestiones/", GestionCreateView.as_view(), name="gestion-create"),
+    path("media/<str:filename>/", protected_media, name="protected-media"),
 ]
 
 
-urlpatterns += router.urls
-
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

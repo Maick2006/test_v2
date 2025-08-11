@@ -1,1 +1,0 @@
-// Página para mostrar lista de actas
