@@ -36,10 +36,3 @@ markdown
 Copiar
 Editar
 
-## Notas
-- Endpoints principales:
-- POST `/api/login/` { correo, password } -> { token, role, user }
-- GET `/api/actas/`
-- GET `/api/actas/<id>/`
-- POST `/api/gestiones/` (multipart/form-data)
-- GET `/media/<archivo>` (protegido, requiere header Authorization: Token <key>)

@@ -17,7 +17,6 @@ class Acta(models.Model):
     def __str__(self):
         return self.titulo
 
-
 class Compromiso(models.Model):
     acta = models.ForeignKey(Acta, related_name="compromisos", on_delete=models.CASCADE)
     titulo = models.CharField(max_length=200)
@@ -28,7 +27,6 @@ class Compromiso(models.Model):
 
     def __str__(self):
         return f"{self.titulo} ({self.acta.titulo})"
-
 
 class Gestion(models.Model):
     compromiso = models.ForeignKey(Compromiso, related_name="gestiones", on_delete=models.CASCADE)
